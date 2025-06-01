@@ -19,6 +19,7 @@ import { Trash2, PlusCircle, ChevronLeft, ChevronRight } from "lucide-react";
 interface DataGridProps {
   data: DataRow[];
   columns: ColumnDefinition[];
+  allColumnKeys: string[]; // All available column keys for initializing new rows
   setData: (data: DataRow[]) => void;
   onNextColumns?: () => void;
   onPrevColumns?: () => void;
@@ -30,6 +31,7 @@ interface DataGridProps {
 const DataGrid: React.FC<DataGridProps> = ({
   data,
   columns,
+  allColumnKeys,
   setData,
   onNextColumns,
   onPrevColumns,
@@ -42,13 +44,14 @@ const DataGrid: React.FC<DataGridProps> = ({
 
   useEffect(() => {
     setEditingCell(null);
-  }, [data]);
+  }, [data, columns]); // Reset editing cell if data or displayed columns change
 
   const handleCellClick = (rowId: string, columnKey: string, currentValue: any) => {
     const columnDef = columns.find(col => col.key === columnKey);
     if (columnDef?.editable) {
       setEditingCell({ rowId, columnKey });
-      setEditValue(String(currentValue));
+      // For arrays or booleans, String(currentValue) is fine for text input
+      setEditValue(String(currentValue ?? ''));
     }
   };
 
@@ -62,6 +65,9 @@ const DataGrid: React.FC<DataGridProps> = ({
     const { rowId, columnKey } = editingCell;
     const newData = data.map((row) => {
       if (row.id === rowId) {
+        // Note: This saves the value as a string.
+        // For specific type handling (e.g., parsing back to boolean/array),
+        // more complex logic would be needed here or upon data submission.
         return { ...row, [columnKey]: editValue };
       }
       return row;
@@ -83,32 +89,25 @@ const DataGrid: React.FC<DataGridProps> = ({
   };
 
   const addRow = () => {
-    const newId = String(Date.now()); 
+    const newId = String(Date.now());
     const newRow: DataRow = { id: newId };
-    // When adding a new row, it should be initialized with keys from *all* possible columns,
-    // not just currently visible ones. For simplicity, we'll use the `columns` prop here,
-    // but ideally, this would use a reference to `initialColumns` if it were passed down.
-    // Assuming `columns` prop might be a slice, this could be an issue if not all fields are present.
-    // For now, let's stick to `columns` for initializing keys. A more robust solution might
-    // need access to the full schema of `initialColumns`.
-    // A quick fix: initialize with all known keys from the first data row if data exists,
-    // otherwise use the provided columns. If columns is also a slice, this remains an issue.
-    // Safest is to initialize based on current `columns` passed.
-    const allKeysInCurrentView = columns.map(c => c.key);
-    allKeysInCurrentView.forEach(key => {
-      newRow[key] = key === 'id' ? newId : '';
+
+    allColumnKeys.forEach(key => {
+      if (key !== 'id') {
+        // Initialize all fields as empty strings for simplicity.
+        // Booleans and arrays from the initial data are also fine as empty strings
+        // when initially represented in a text input.
+        newRow[key] = '';
+      }
     });
-    // If there are keys in existing data not in current `columns` view, they should persist.
-    // The simplest approach is to add a new row with just an ID and empty values for current columns.
-    // Other columns will be undefined and can be filled when visible.
     setData([...data, newRow]);
   };
-  
+
   const deleteRow = (rowId: string) => {
     setData(data.filter(row => row.id !== rowId));
   };
 
-  const showColumnNavigation = !isMobileLayout && typeof canGoNext === 'boolean' && typeof canGoPrev === 'boolean';
+  const showColumnNavigation = !isMobileLayout && typeof canGoNext === 'boolean' && typeof canGoPrev === 'boolean' && columns.length > 0;
 
   return (
     <div className="h-full flex flex-col bg-card shadow-lg rounded-lg overflow-hidden">
@@ -162,7 +161,12 @@ const DataGrid: React.FC<DataGridProps> = ({
                         className="h-8 text-sm"
                       />
                     ) : (
-                      <span className="text-sm">{String(row[col.key] ?? '')}</span>
+                      <span className="text-sm">
+                        {/* Display array as comma-separated string, boolean as string, others as is */}
+                        {Array.isArray(row[col.key])
+                          ? (row[col.key] as any[]).join(', ')
+                          : String(row[col.key] ?? '')}
+                      </span>
                     )}
                   </TableCell>
                 ))}
@@ -195,3 +199,5 @@ const DataGrid: React.FC<DataGridProps> = ({
 };
 
 export default DataGrid;
+
+    

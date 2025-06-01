@@ -1,3 +1,4 @@
+
 "use client";
 
 import type React from 'react';
@@ -11,13 +12,18 @@ interface PdfElement {
 }
 
 const mockPdfElements: PdfElement[] = [
-  { id: 'el1', text: 'Invoice Number: INV-2024-001', position: { top: '20px', left: '20px', width: 'calc(100% - 40px)' } },
-  { id: 'el2', text: 'Client Name: Stellar Solutions Inc.', position: { top: '60px', left: '20px', width: 'calc(100% - 40px)' } },
-  { id: 'el3', text: 'Date: July 26, 2024', position: { top: '100px', left: '20px', width: 'calc(100% - 40px)' } },
-  { id: 'el4', text: 'Total Amount: $2,500.00', position: { top: '140px', left: '20px', width: 'calc(100% - 40px)' } },
-  { id: 'el5', text: 'Item: Web Development Services', position: { top: '180px', left: '40px', width: 'calc(100% - 60px)' } },
-  { id: 'el6', text: 'Item: UI/UX Design Package', position: { top: '220px', left: '40px', width: 'calc(100% - 60px)' } },
+  { id: 'el1', text: 'Поз.: П1', position: { top: '20px', left: '20px', width: 'auto' } },
+  { id: 'el2', text: 'Наименование: ИТП', position: { top: '50px', left: '20px', width: 'auto' } },
+  { id: 'el3', text: 'Тип, характеристика: Кан.вент. IP54, FRC 60-30', position: { top: '80px', left: '20px', width: 'calc(100% - 40px)' } },
+  { id: 'el4', text: 'Кол-во: 1', position: { top: '120px', left: '20px', width: 'auto' } },
+  { id: 'el5', text: 'Артикул: ABC-123', position: { top: '150px', left: '20px', width: 'auto' } },
+  { id: 'el6', text: 'Заметка: Требуется проверка размеров', position: { top: '180px', left: '20px', width: 'calc(100% - 40px)' } },
+  { id: 'el7', text: 'Поз.: П2', position: { top: '220px', left: '20px', width: 'auto' } },
+  { id: 'el8', text: 'Наименование: Помещения охраны', position: { top: '250px', left: '20px', width: 'auto' } },
+  { id: 'el9', text: 'Тип, характеристика: Кан.вент. IP54, KVR 100/1', position: { top: '280px', left: '20px', width: 'calc(100% - 40px)' } },
+  { id: 'el10', text: 'Производитель: Systemair', position: { top: '320px', left: '20px', width: 'auto' } },
 ];
+
 
 interface PdfViewerProps {
   onElementSelect: (text: string) => void;
@@ -61,3 +67,5 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ onElementSelect, selectedElementT
 };
 
 export default PdfViewer;
+
+    
