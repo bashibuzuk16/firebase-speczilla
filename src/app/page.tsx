@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import AppHeader from '@/components/app-header';
 import PdfViewer from '@/components/pdf-viewer';
 import DataGrid from '@/components/data-grid';
@@ -24,29 +24,31 @@ const initialColumns: ColumnDefinition[] = [
   { key: 'notes', header: 'Notes', editable: true },
 ];
 
-const MIN_PANEL_PERCENTAGE = 20; // Minimum percentage for the PDF panel
-const MAX_PANEL_PERCENTAGE = 80; // Maximum percentage for the PDF panel
+const MIN_PANEL_PERCENTAGE = 20; 
+const MAX_PANEL_PERCENTAGE = 80; 
 const RESIZE_HANDLE_WIDTH = 8; // px
 
 export default function PdfDataEditorPage() {
   const [structuredData, setStructuredData] = useState<DataRow[]>(initialData);
-  // initialColumns will be the source of truth for all available columns
-  // displayedGridColumns will be the subset of columns actually rendered in DataGrid
   const [displayedGridColumns, setDisplayedGridColumns] = useState<ColumnDefinition[]>(initialColumns);
   const [selectedPdfElementText, setSelectedPdfElementText] = useState<string | null>(null);
   const { toast } = useToast();
 
   const mainContainerRef = useRef<HTMLElement>(null);
-  const [pdfPanelPercent, setPdfPanelPercent] = useState(40); // Initial percentage for PDF panel
+  const [pdfPanelPercent, setPdfPanelPercent] = useState(40);
   const [isResizing, setIsResizing] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  const dataTableColumnNamesForMapper = initialColumns.map(col => col.key).filter(key => key !== 'id');
+  // State for column pagination
+  const [currentColumnStartIndex, setCurrentColumnStartIndex] = useState(0);
+  const [numColumnsAllowedByWidth, setNumColumnsAllowedByWidth] = useState(initialColumns.length);
+
+  const dataTableColumnNamesForMapper = useMemo(() => initialColumns.map(col => col.key).filter(key => key !== 'id'), [initialColumns]);
 
   useEffect(() => {
     const updateLayoutConfig = () => {
-      const newIsMobile = window.innerWidth < 768; // Tailwind 'md' breakpoint
+      const newIsMobile = window.innerWidth < 768; 
       setIsMobileLayout(newIsMobile);
       if (mainContainerRef.current) {
         setContainerWidth(mainContainerRef.current.offsetWidth);
@@ -65,31 +67,13 @@ export default function PdfDataEditorPage() {
 
   useEffect(() => {
     if (isMobileLayout) {
-      setIsResizing(false); // Stop resizing if layout changes to mobile
+      setIsResizing(false); 
       return;
     }
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing || !mainContainerRef.current) return;
-
       const containerRect = mainContainerRef.current.getBoundingClientRect();
-      const mouseXRelative = e.clientX - containerRect.left;
-      
-      // Total width available for panels is container width minus handle width
-      const totalPanelWidth = containerRect.width - RESIZE_HANDLE_WIDTH;
-      if (totalPanelWidth <= 0) return;
-
-      let newPdfPanelPercent = (mouseXRelative / totalPanelWidth) * 100;
-      
-      // Adjust newPdfPanelPercent to be for its share of totalPanelWidth
-      // If mouseXRelative is for the left edge of handle, then that's the width of pdf panel
-      // newPdfPanelPercent = (mouseXRelative / totalPanelWidth) * 100;
-      // No, mouseXRelative is fine, the percentage is of the total width that *panels* can occupy
-      // The actual width of PDF panel is newPdfPanelPercent/100 * totalPanelWidth
-      // We are setting pdfPanelPercent which is a conceptual split.
-      // The flex-basis will be set using this percent relative to 100% of available space for that panel.
-      // Let's simplify: pdfPanelPercent is the percentage of (container width - handle_width) for the left panel.
-
       const effectiveMouseX = e.clientX - containerRect.left;
       let newPercent = (effectiveMouseX / (containerRect.width - RESIZE_HANDLE_WIDTH)) * 100;
       newPercent = Math.max(MIN_PANEL_PERCENTAGE, Math.min(MAX_PANEL_PERCENTAGE, newPercent));
@@ -111,40 +95,60 @@ export default function PdfDataEditorPage() {
     };
   }, [isResizing, isMobileLayout]);
 
+
+  // Effect 1: Determine numColumnsAllowedByWidth based on panel size and layout
   useEffect(() => {
     if (isMobileLayout) {
-      setDisplayedGridColumns(initialColumns);
-      setPdfPanelPercent(40); // Reset to default for mobile if needed
+      setNumColumnsAllowedByWidth(initialColumns.length);
+      setPdfPanelPercent(40); // Reset to default for mobile
       return;
     }
-    if (containerWidth === 0) {
-      setDisplayedGridColumns(initialColumns);
+    if (containerWidth === 0 && !isMobileLayout) { // ensure this doesn't run unnecessarily on mobile init
+      setNumColumnsAllowedByWidth(initialColumns.length);
       return;
     }
-
+    
     const effectiveContainerWidth = containerWidth - RESIZE_HANDLE_WIDTH;
+    // Ensure dataGridPanelWidthPx is not calculated if containerWidth is 0 or effectiveContainerWidth is negative.
+    if (effectiveContainerWidth <= 0) {
+        setNumColumnsAllowedByWidth(1); // Show at least one column if panel is extremely small
+        return;
+    }
     const dataGridPanelWidthPx = effectiveContainerWidth * ((100 - pdfPanelPercent) / 100);
 
-    let newColsToShow: ColumnDefinition[];
-    const fieldNameCol = initialColumns.find(c => c.key === 'fieldName');
-    const fieldValueCol = initialColumns.find(c => c.key === 'fieldValue');
-    const categoryCol = initialColumns.find(c => c.key === 'category');
-    const notesCol = initialColumns.find(c => c.key === 'notes');
-
+    let newNumColsAllowed: number;
     if (dataGridPanelWidthPx < 350) {
-      newColsToShow = fieldNameCol ? [fieldNameCol] : initialColumns.slice(0, 1);
+      newNumColsAllowed = 1;
     } else if (dataGridPanelWidthPx < 550) {
-      newColsToShow = [fieldNameCol, fieldValueCol].filter(Boolean) as ColumnDefinition[];
-      if (newColsToShow.length === 0 && initialColumns.length > 0) newColsToShow = initialColumns.slice(0, Math.min(2, initialColumns.length));
+      newNumColsAllowed = 2;
     } else if (dataGridPanelWidthPx < 750) {
-      newColsToShow = [fieldNameCol, fieldValueCol, categoryCol].filter(Boolean) as ColumnDefinition[];
-      if (newColsToShow.length === 0 && initialColumns.length > 0) newColsToShow = initialColumns.slice(0, Math.min(3, initialColumns.length));
+      newNumColsAllowed = 3;
     } else {
-      newColsToShow = initialColumns;
+      newNumColsAllowed = initialColumns.length;
     }
-    setDisplayedGridColumns(newColsToShow);
+    setNumColumnsAllowedByWidth(newNumColsAllowed);
+  }, [pdfPanelPercent, isMobileLayout, containerWidth, initialColumns.length]);
 
-  }, [pdfPanelPercent, isMobileLayout, containerWidth, initialColumns]);
+  // Effect 2: Adjust currentColumnStartIndex when numColumnsAllowedByWidth changes
+  useEffect(() => {
+    setCurrentColumnStartIndex(prevStartIndex => {
+      const maxPossibleIndex = initialColumns.length - numColumnsAllowedByWidth;
+      // If all columns can be shown, or more slots than columns, start index must be 0.
+      if (maxPossibleIndex <= 0) return 0; 
+      return Math.max(0, Math.min(prevStartIndex, maxPossibleIndex));
+    });
+  }, [numColumnsAllowedByWidth, initialColumns.length]);
+
+  // Effect 3: Update displayedGridColumns based on startIndex and numAllowed
+  useEffect(() => {
+    if (numColumnsAllowedByWidth <= 0) { // Handle edge case where no columns can be shown
+        setDisplayedGridColumns([]);
+        return;
+    }
+    const endIndex = currentColumnStartIndex + numColumnsAllowedByWidth;
+    const actualEndIndex = Math.min(endIndex, initialColumns.length);
+    setDisplayedGridColumns(initialColumns.slice(currentColumnStartIndex, actualEndIndex));
+  }, [currentColumnStartIndex, numColumnsAllowedByWidth, initialColumns]);
 
 
   const handlePdfElementSelect = (text: string) => {
@@ -196,7 +200,7 @@ export default function PdfDataEditorPage() {
   };
 
   const handleExportCsv = () => {
-    const csvData = convertToCsv(structuredData, initialColumns); // Export all columns, not just visible
+    const csvData = convertToCsv(structuredData, initialColumns);
     downloadCsv(csvData, 'edited_data');
     toast({ title: "Exported as CSV", description: "Data has been downloaded as CSV file." });
   };
@@ -208,16 +212,33 @@ export default function PdfDataEditorPage() {
     });
   };
 
+  const handleNextColumns = () => {
+    setCurrentColumnStartIndex(prev => {
+      if (numColumnsAllowedByWidth <= 0) return prev;
+      // Ensure new start index doesn't go beyond what's possible
+      const maxStart = initialColumns.length - numColumnsAllowedByWidth;
+      if (maxStart < 0) return 0; // Should not happen if numColumnsAllowedByWidth is well-behaved
+      return Math.min(prev + 1, maxStart);
+    });
+  };
+
+  const handlePrevColumns = () => {
+    setCurrentColumnStartIndex(prev => Math.max(0, prev - 1));
+  };
+
+  const canGoNext = numColumnsAllowedByWidth > 0 && currentColumnStartIndex < initialColumns.length - numColumnsAllowedByWidth;
+  const canGoPrev = currentColumnStartIndex > 0;
+
   const leftPanelStyle: React.CSSProperties = isMobileLayout ? {} : {
     flexBasis: `${pdfPanelPercent}%`,
-    minWidth: 0, // Important for flex shrinking
-    overflow: 'hidden', // Prevent content from breaking layout
+    minWidth: 0, 
+    overflow: 'hidden', 
   };
 
   const rightPanelStyle: React.CSSProperties = isMobileLayout ? {} : {
     flexBasis: `${100 - pdfPanelPercent}%`,
-    minWidth: 0, // Important for flex shrinking
-    overflow: 'hidden', // Prevent content from breaking layout
+    minWidth: 0, 
+    overflow: 'hidden',
   };
 
   return (
@@ -254,13 +275,18 @@ export default function PdfDataEditorPage() {
         )}
 
         <div 
-          className={`${isMobileLayout ? 'w-full' : ''} flex flex-col`} // Ensure DataGrid can be h-full
+          className={`${isMobileLayout ? 'w-full' : ''} flex flex-col`}
           style={rightPanelStyle}
         >
           <DataGrid
             data={structuredData}
             columns={displayedGridColumns}
             setData={handleDataUpdate}
+            onNextColumns={handleNextColumns}
+            onPrevColumns={handlePrevColumns}
+            canGoNext={canGoNext}
+            canGoPrev={canGoPrev}
+            isMobileLayout={isMobileLayout}
           />
         </div>
       </main>
@@ -268,9 +294,8 @@ export default function PdfDataEditorPage() {
         PDF Data Editor - Powered by Next.js and Firebase Genkit
       </footer>
       {isResizing && (
-        <div className="fixed inset-0 z-50 cursor-col-resize" /> /* Overlay to catch mouse events globally */
+        <div className="fixed inset-0 z-50 cursor-col-resize" />
       )}
     </div>
   );
 }
-
