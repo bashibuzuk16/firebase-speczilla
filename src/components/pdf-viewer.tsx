@@ -8,20 +8,23 @@ import { FileText } from 'lucide-react';
 interface PdfElement {
   id: string;
   text: string;
-  position: { top: string; left: string; width?: string };
+  position: { top: string; left: string; width?: string; textAlign?: CanvasTextAlign };
 }
 
 const mockPdfElements: PdfElement[] = [
-  { id: 'el1', text: 'Поз.: П1', position: { top: '20px', left: '20px', width: 'auto' } },
-  { id: 'el2', text: 'Наименование: ИТП', position: { top: '50px', left: '20px', width: 'auto' } },
-  { id: 'el3', text: 'Тип, характеристика: Кан.вент. IP54, FRC 60-30', position: { top: '80px', left: '20px', width: 'calc(100% - 40px)' } },
-  { id: 'el4', text: 'Кол-во: 1', position: { top: '120px', left: '20px', width: 'auto' } },
-  { id: 'el5', text: 'Артикул: ABC-123', position: { top: '150px', left: '20px', width: 'auto' } },
-  { id: 'el6', text: 'Заметка: Требуется проверка размеров', position: { top: '180px', left: '20px', width: 'calc(100% - 40px)' } },
-  { id: 'el7', text: 'Поз.: П2', position: { top: '220px', left: '20px', width: 'auto' } },
-  { id: 'el8', text: 'Наименование: Помещения охраны', position: { top: '250px', left: '20px', width: 'auto' } },
-  { id: 'el9', text: 'Тип, характеристика: Кан.вент. IP54, KVR 100/1', position: { top: '280px', left: '20px', width: 'calc(100% - 40px)' } },
-  { id: 'el10', text: 'Производитель: Systemair', position: { top: '320px', left: '20px', width: 'auto' } },
+  { id: 'pg1', text: 'page1', position: { top: '5px', left: '50%', width: 'auto'}, },
+  { id: 'el1', text: 'Поз.: П1', position: { top: '30px', left: '20px', width: 'auto' } },
+  { id: 'el2', text: 'Наименование: ИТП', position: { top: '60px', left: '20px', width: 'auto' } },
+  { id: 'el3', text: 'Тип, характеристика: Кан.вент. IP54, FRC 60-30', position: { top: '90px', left: '20px', width: 'calc(100% - 40px)' } },
+  { id: 'el4', text: 'Кол-во: 1', position: { top: '130px', left: '20px', width: 'auto' } },
+  { id: 'el5', text: 'Артикул: ABC-123', position: { top: '160px', left: '20px', width: 'auto' } },
+  { id: 'el6', text: 'Заметка: Требуется проверка размеров', position: { top: '190px', left: '20px', width: 'calc(100% - 40px)' } },
+  { id: 'pg2', text: 'page2', position: { top: '230px', left: '50%', width: 'auto'}, },
+  { id: 'el7', text: 'Поз.: П2', position: { top: '260px', left: '20px', width: 'auto' } },
+  { id: 'el8', text: 'Наименование: Помещения охраны', position: { top: '290px', left: '20px', width: 'auto' } },
+  { id: 'el9', text: 'Тип, характеристика: Кан.вент. IP54, KVR 100/1', position: { top: '320px', left: '20px', width: 'calc(100% - 40px)' } },
+  { id: 'el10', text: 'Производитель: Systemair', position: { top: '360px', left: '20px', width: 'auto' } },
+  { id: 'pg4', text: 'page4', position: { top: '400px', left: '50%', width: 'auto'}, },
 ];
 
 
@@ -53,8 +56,14 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ onElementSelect, selectedElementT
                 className={`p-2 mb-2 cursor-pointer border rounded-md transition-all duration-150 ease-in-out hover:bg-accent/20
                   ${selectedElementText === element.text ? 'bg-accent text-accent-foreground ring-2 ring-accent' : 'bg-background hover:border-primary'}
                   absolute text-sm`}
-                style={{ top: element.position.top, left: element.position.left, width: element.position.width }}
-                data-ai-hint="document text"
+                style={{ 
+                  top: element.position.top, 
+                  left: element.position.left, 
+                  width: element.position.width,
+                  transform: element.id.startsWith('pg') ? 'translateX(-50%)' : undefined, // Center page numbers
+                  textAlign: element.position.textAlign,
+                }}
+                data-ai-hint={element.id.startsWith('pg') ? "page number" : "document text"}
               >
                 {element.text}
               </div>
@@ -67,5 +76,3 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ onElementSelect, selectedElementT
 };
 
 export default PdfViewer;
-
-    
