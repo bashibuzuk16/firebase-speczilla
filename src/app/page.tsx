@@ -10,10 +10,9 @@ import type { DataRow, ColumnDefinition } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Set workerSrc for pdfjs-dist. For a prototype, using a CDN is acceptable.
-// In a production environment, you'd typically host the worker file yourself.
-// This version should be compatible with pdfjs-dist v4.x.x
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Set workerSrc for pdfjs-dist.
+// Explicitly use the version from package.json to avoid mismatches.
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js`;
 
 
 const defaultInitialData: DataRow[] = [
