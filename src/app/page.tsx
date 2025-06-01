@@ -10,9 +10,7 @@ import type { DataRow, ColumnDefinition } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Set workerSrc for pdfjs-dist.
-// Explicitly use the version from package.json to avoid mismatches.
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 
 const defaultInitialData: DataRow[] = [
@@ -99,10 +97,10 @@ const defaultInitialColumns: ColumnDefinition[] = [
   { key: 'allies', header: 'Allies', editable: true },
   { key: 'function', header: 'Function', editable: true },
   { key: 'Artikul_fact', header: 'Artikul Fact', editable: true },
-  { key: 'potential_artikuls', header: 'Potential Artikuls', editable: true }, // Arrays will be stringified in the input
-  { key: 'manual_check_needed', header: 'Manual Check Needed', editable: true }, // Booleans will be stringified
+  { key: 'potential_artikuls', header: 'Potential Artikuls', editable: true },
+  { key: 'manual_check_needed', header: 'Manual Check Needed', editable: true },
   { key: 'matching_thoughts', header: 'Matching Thoughts', editable: true },
-  { key: 'found_in_pdf_on_pages', header: 'Found In PDF (Pages)', editable: true }, // Arrays will be stringified
+  { key: 'found_in_pdf_on_pages', header: 'Found In PDF (Pages)', editable: true },
 ];
 
 
@@ -134,7 +132,9 @@ export default function PdfDataEditorPage() {
   const jsonInputRef = useRef<HTMLInputElement>(null);
   
   const [loadedPdfName, setLoadedPdfName] = useState<string | null>(null);
-  const [pdfPageImage, setPdfPageImage] = useState<string | null>(null);
+  const [pdfPageImages, setPdfPageImages] = useState<string[] | null>(null);
+  const [currentPageNum, setCurrentPageNum] = useState<number>(1);
+  const [totalPdfPages, setTotalPdfPages] = useState<number>(0);
   const [isProcessingPdf, setIsProcessingPdf] = useState<boolean>(false);
 
   const [pdfPanelPercent, setPdfPanelPercent] = useState(40);
@@ -257,12 +257,11 @@ export default function PdfDataEditorPage() {
 
 
   const handlePdfElementSelect = (text: string) => {
-    if (pdfPageImage) {
-      // If a real PDF is loaded, mock element selection is disabled
+    if (pdfPageImages && pdfPageImages.length > 0) {
       setSelectedPdfElementText(null);
       toast({
         title: "Info",
-        description: "Text selection is from mock elements, not the displayed PDF image.",
+        description: "Text selection from mock elements is disabled when viewing an uploaded PDF's pages.",
       });
       return;
     }
@@ -340,8 +339,10 @@ export default function PdfDataEditorPage() {
     if (file) {
       setLoadedPdfName(file.name);
       setIsProcessingPdf(true);
-      setPdfPageImage(null); // Clear previous image
-      setSelectedPdfElementText(null); // Clear selected text from mock
+      setPdfPageImages(null); 
+      setCurrentPageNum(1);
+      setTotalPdfPages(0);
+      setSelectedPdfElementText(null); 
       toast({
         title: "Processing PDF...",
         description: `Loading "${file.name}". This may take a moment.`,
@@ -351,36 +352,45 @@ export default function PdfDataEditorPage() {
         const arrayBuffer = await file.arrayBuffer();
         const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
         const pdf = await loadingTask.promise;
-        const page = await pdf.getPage(1); // Get the first page
         
-        const desiredWidth = 800; // You can adjust this
-        const viewport = page.getViewport({ scale: 1 });
-        const scale = desiredWidth / viewport.width;
-        const scaledViewport = page.getViewport({ scale });
+        setTotalPdfPages(pdf.numPages);
+        const pageImagePromises: Promise<string>[] = [];
 
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        
-        if (!context) {
-            throw new Error("Could not get canvas context");
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const desiredWidth = 800; 
+          const viewport = page.getViewport({ scale: 1 });
+          const scale = desiredWidth / viewport.width;
+          const scaledViewport = page.getViewport({ scale });
+
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          
+          if (!context) {
+              throw new Error("Could not get canvas context for page " + i);
+          }
+
+          canvas.height = scaledViewport.height;
+          canvas.width = scaledViewport.width;
+
+          await page.render({ canvasContext: context, viewport: scaledViewport }).promise;
+          pageImagePromises.push(Promise.resolve(canvas.toDataURL('image/png')));
         }
+        
+        const resolvedPageImages = await Promise.all(pageImagePromises);
+        setPdfPageImages(resolvedPageImages);
+        setCurrentPageNum(1);
 
-        canvas.height = scaledViewport.height;
-        canvas.width = scaledViewport.width;
-
-        await page.render({ canvasContext: context, viewport: scaledViewport }).promise;
-        const imageDataUrl = canvas.toDataURL('image/png');
-        setPdfPageImage(imageDataUrl);
         toast({
-          title: "PDF Page Loaded",
-          description: `First page of "${file.name}" is now displayed.`,
+          title: "PDF Processed",
+          description: `${pdf.numPages} page(s) of "${file.name}" processed and ready to view.`,
         });
       } catch (error) {
         console.error("Error processing PDF:", error);
-        setPdfPageImage(null);
+        setPdfPageImages(null);
         toast({
-          title: "Error Loading PDF Page",
-          description: `Could not display page from "${file.name}". Error: ${error instanceof Error ? error.message : String(error)}`,
+          title: "Error Loading PDF",
+          description: `Could not process PDF "${file.name}". Error: ${error instanceof Error ? error.message : String(error)}`,
           variant: "destructive",
         });
       } finally {
@@ -389,6 +399,15 @@ export default function PdfDataEditorPage() {
     }
     if (pdfInputRef.current) pdfInputRef.current.value = ""; 
   };
+
+  const handleNextPage = () => {
+    setCurrentPageNum((prev) => Math.min(prev + 1, totalPdfPages));
+  };
+
+  const handlePrevPage = () => {
+    setCurrentPageNum((prev) => Math.max(prev - 1, 1));
+  };
+
 
   const handleJsonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -503,7 +522,11 @@ export default function PdfDataEditorPage() {
             onElementSelect={handlePdfElementSelect} 
             selectedElementText={selectedPdfElementText}
             loadedPdfName={loadedPdfName}
-            pdfPageImage={pdfPageImage}
+            pdfPageImages={pdfPageImages}
+            currentPageNum={currentPageNum}
+            totalPdfPages={totalPdfPages}
+            onNextPage={handleNextPage}
+            onPrevPage={handlePrevPage}
             isProcessingPdf={isProcessingPdf}
           />
           <SmartMapper
@@ -550,3 +573,4 @@ export default function PdfDataEditorPage() {
     </div>
   );
 }
+
