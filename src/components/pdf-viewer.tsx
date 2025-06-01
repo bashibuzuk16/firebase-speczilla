@@ -4,27 +4,33 @@
 import type React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText } from 'lucide-react';
+import Image from 'next/image';
 
 interface PdfElement {
   id: string;
   text: string;
-  position: { top: string; left: string; width?: string; textAlign?: CanvasTextAlign };
+  position: { 
+    top: string; 
+    left: string; 
+    width?: string; 
+    textAlign?: CanvasTextAlign;
+    transform?: string; 
+  };
 }
 
 const mockPdfElements: PdfElement[] = [
-  { id: 'pg1', text: 'page1', position: { top: '5px', left: '50%', width: 'auto'}, },
-  { id: 'el1', text: 'Поз.: П1', position: { top: '30px', left: '20px', width: 'auto' } },
-  { id: 'el2', text: 'Наименование: ИТП', position: { top: '60px', left: '20px', width: 'auto' } },
-  { id: 'el3', text: 'Тип, характеристика: Кан.вент. IP54, FRC 60-30', position: { top: '90px', left: '20px', width: 'calc(100% - 40px)' } },
-  { id: 'el4', text: 'Кол-во: 1', position: { top: '130px', left: '20px', width: 'auto' } },
-  { id: 'el5', text: 'Артикул: ABC-123', position: { top: '160px', left: '20px', width: 'auto' } },
-  { id: 'el6', text: 'Заметка: Требуется проверка размеров', position: { top: '190px', left: '20px', width: 'calc(100% - 40px)' } },
-  { id: 'pg2', text: 'page2', position: { top: '230px', left: '50%', width: 'auto'}, },
-  { id: 'el7', text: 'Поз.: П2', position: { top: '260px', left: '20px', width: 'auto' } },
-  { id: 'el8', text: 'Наименование: Помещения охраны', position: { top: '290px', left: '20px', width: 'auto' } },
-  { id: 'el9', text: 'Тип, характеристика: Кан.вент. IP54, KVR 100/1', position: { top: '320px', left: '20px', width: 'calc(100% - 40px)' } },
-  { id: 'el10', text: 'Производитель: Systemair', position: { top: '360px', left: '20px', width: 'auto' } },
-  { id: 'pg4', text: 'page4', position: { top: '400px', left: '50%', width: 'auto'}, },
+  { id: 'page-info', text: 'SHEET 1 OF 5 - GENERAL ASSEMBLY', position: { top: '2%', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' } },
+  { id: 'title-block-project', text: 'PROJECT: AUTONOMOUS DRONE CHASSIS', position: { top: '90%', left: '60%' } },
+  { id: 'title-block-drawnby', text: 'DRAWN BY: A.I. Modeler', position: { top: '92%', left: '60%' } },
+  { id: 'title-block-date', text: 'DATE: 2024-07-15', position: { top: '94%', left: '60%' } },
+  { id: 'title-block-scale', text: 'SCALE: 1:10', position: { top: '90%', left: '85%' } },
+  { id: 'title-block-rev', text: 'REV: C', position: { top: '92%', left: '85%' } },
+  { id: 'annotation-1', text: 'Callout A: Mounting Hole (M3)', position: { top: '15%', left: '10%' } },
+  { id: 'dimension-1', text: 'Overall Length: 450mm ±0.5', position: { top: '30%', left: '35%' } },
+  { id: 'dimension-2', text: 'Overall Width: 300mm ±0.5', position: { top: '50%', left: '10%' } },
+  { id: 'note-1', text: 'Note: All sharp edges to be deburred.', position: { top: '80%', left: '5%' } },
+  { id: 'part-label-1', text: 'Item 1: Main Frame (AL-6061)', position: { top: '55%', left: '50%' } },
+  { id: 'section-view-label', text: 'SECTION B-B', position: { top: '70%', left: '75%' } },
 ];
 
 
@@ -39,31 +45,39 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ onElementSelect, selectedElementT
       <CardHeader className="border-b">
         <CardTitle className="flex items-center text-lg font-semibold">
           <FileText className="w-5 h-5 mr-2 text-primary" />
-          PDF Document Viewer
+          Engineering Drawing Viewer (Mock-up)
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-grow p-4 bg-gray-50 relative overflow-auto">
-        <div className="w-full h-full border border-dashed border-gray-300 rounded-md p-2 bg-white shadow-inner">
-          {/* Placeholder for PDF content */}
-          <p className="text-sm text-muted-foreground text-center mb-4">
-            This is a mock PDF view. Click on an element below to select it.
-          </p>
-          <div className="relative h-[500px]"> {/* Ensure there's enough height for absolute positioning */}
+      <CardContent className="flex-grow p-2 bg-muted/30 relative overflow-auto">
+        <div className="w-full h-full relative bg-gray-100 rounded-md shadow-inner aspect-[8/11]"> {/* Aspect ratio for portrait drawing */}
+          <Image
+            src="https://placehold.co/800x1100.png" // Placeholder for engineering drawing
+            alt="Engineering Drawing Mockup"
+            layout="fill"
+            objectFit="contain" // Use "contain" to see the whole drawing, "cover" to fill
+            className="opacity-70"
+            data-ai-hint="technical drawing blueprint"
+            priority
+          />
+          {/* Overlay for clickable elements */}
+          <div className="absolute inset-0 w-full h-full"> 
             {mockPdfElements.map((element) => (
               <div
                 key={element.id}
                 onClick={() => onElementSelect(element.text)}
-                className={`p-2 mb-2 cursor-pointer border rounded-md transition-all duration-150 ease-in-out hover:bg-accent/20
-                  ${selectedElementText === element.text ? 'bg-accent text-accent-foreground ring-2 ring-accent' : 'bg-background hover:border-primary'}
-                  absolute text-sm`}
+                className={`py-0.5 px-1 cursor-pointer border border-transparent rounded-sm transition-all duration-150 ease-in-out
+                  ${selectedElementText === element.text 
+                    ? 'bg-accent/80 text-accent-foreground ring-1 ring-primary shadow-md' 
+                    : 'bg-black/10 text-black hover:bg-accent/40 hover:border-primary/50 hover:shadow-sm'}
+                  absolute text-[10px] leading-tight backdrop-blur-[1px]`} // Smaller text, subtle background
                 style={{ 
                   top: element.position.top, 
                   left: element.position.left, 
-                  width: element.position.width,
-                  transform: element.id.startsWith('pg') ? 'translateX(-50%)' : undefined, // Center page numbers
+                  width: element.position.width || 'auto',
+                  transform: element.position.transform,
                   textAlign: element.position.textAlign,
                 }}
-                data-ai-hint={element.id.startsWith('pg') ? "page number" : "document text"}
+                data-ai-hint="engineering annotation dimension" // More specific hint
               >
                 {element.text}
               </div>
@@ -76,3 +90,4 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ onElementSelect, selectedElementT
 };
 
 export default PdfViewer;
+
