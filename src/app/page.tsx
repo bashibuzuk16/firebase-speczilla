@@ -8,10 +8,17 @@ import DataGrid from '@/components/data-grid';
 import SmartMapper from '@/components/smart-mapper';
 import type { DataRow, ColumnDefinition } from '@/types';
 import { useToast } from "@/hooks/use-toast";
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Set workerSrc for pdfjs-dist. For a prototype, using a CDN is acceptable.
+// In a production environment, you'd typically host the worker file yourself.
+// This version should be compatible with pdfjs-dist v4.x.x
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
 
 const defaultInitialData: DataRow[] = [
   {
-    id: "1",
+    id: "gen-1721161200000-0",
     pos: "П1",
     name: "ИТП",
     type_original: "Кан.вент. IP54, FRC 60-30",
@@ -40,7 +47,7 @@ const defaultInitialData: DataRow[] = [
     found_in_pdf_on_pages: [6, 7]
   },
   {
-    id: "2",
+    id: "gen-1721161200000-1",
     pos: "П2",
     name: "Помещения охраны",
     type_original: "Кан.вент. IP54, KVR 100/1",
@@ -93,11 +100,12 @@ const defaultInitialColumns: ColumnDefinition[] = [
   { key: 'allies', header: 'Allies', editable: true },
   { key: 'function', header: 'Function', editable: true },
   { key: 'Artikul_fact', header: 'Artikul Fact', editable: true },
-  { key: 'potential_artikuls', header: 'Potential Artikuls', editable: true },
-  { key: 'manual_check_needed', header: 'Manual Check Needed', editable: true },
+  { key: 'potential_artikuls', header: 'Potential Artikuls', editable: true }, // Arrays will be stringified in the input
+  { key: 'manual_check_needed', header: 'Manual Check Needed', editable: true }, // Booleans will be stringified
   { key: 'matching_thoughts', header: 'Matching Thoughts', editable: true },
-  { key: 'found_in_pdf_on_pages', header: 'Found In PDF (Pages)', editable: true },
+  { key: 'found_in_pdf_on_pages', header: 'Found In PDF (Pages)', editable: true }, // Arrays will be stringified
 ];
+
 
 const MIN_PANEL_PERCENTAGE = 20;
 const MAX_PANEL_PERCENTAGE = 80;
@@ -110,8 +118,8 @@ function generateColumnsFromJson(jsonData: DataRow[]): ColumnDefinition[] {
   const firstRow = jsonData[0];
   return Object.keys(firstRow).map(key => ({
     key,
-    header: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // Format header
-    editable: true, // Default to editable
+    header: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), 
+    editable: true, 
   }));
 }
 
@@ -125,7 +133,10 @@ export default function PdfDataEditorPage() {
   const mainContainerRef = useRef<HTMLElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const jsonInputRef = useRef<HTMLInputElement>(null);
+  
   const [loadedPdfName, setLoadedPdfName] = useState<string | null>(null);
+  const [pdfPageImage, setPdfPageImage] = useState<string | null>(null);
+  const [isProcessingPdf, setIsProcessingPdf] = useState<boolean>(false);
 
   const [pdfPanelPercent, setPdfPanelPercent] = useState(40);
   const [isResizing, setIsResizing] = useState(false);
@@ -247,6 +258,15 @@ export default function PdfDataEditorPage() {
 
 
   const handlePdfElementSelect = (text: string) => {
+    if (pdfPageImage) {
+      // If a real PDF is loaded, mock element selection is disabled
+      setSelectedPdfElementText(null);
+      toast({
+        title: "Info",
+        description: "Text selection is from mock elements, not the displayed PDF image.",
+      });
+      return;
+    }
     setSelectedPdfElementText(text);
     toast({
       title: "PDF Element Selected",
@@ -316,16 +336,59 @@ export default function PdfDataEditorPage() {
     jsonInputRef.current?.click();
   };
 
-  const handlePdfFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePdfFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setLoadedPdfName(file.name);
+      setIsProcessingPdf(true);
+      setPdfPageImage(null); // Clear previous image
+      setSelectedPdfElementText(null); // Clear selected text from mock
       toast({
-        title: "PDF Loaded (Mock)",
-        description: `"${file.name}" selected. Viewer shows mock content.`,
+        title: "Processing PDF...",
+        description: `Loading "${file.name}". This may take a moment.`,
       });
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1); // Get the first page
+        
+        const desiredWidth = 800; // You can adjust this
+        const viewport = page.getViewport({ scale: 1 });
+        const scale = desiredWidth / viewport.width;
+        const scaledViewport = page.getViewport({ scale });
+
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        
+        if (!context) {
+            throw new Error("Could not get canvas context");
+        }
+
+        canvas.height = scaledViewport.height;
+        canvas.width = scaledViewport.width;
+
+        await page.render({ canvasContext: context, viewport: scaledViewport }).promise;
+        const imageDataUrl = canvas.toDataURL('image/png');
+        setPdfPageImage(imageDataUrl);
+        toast({
+          title: "PDF Page Loaded",
+          description: `First page of "${file.name}" is now displayed.`,
+        });
+      } catch (error) {
+        console.error("Error processing PDF:", error);
+        setPdfPageImage(null);
+        toast({
+          title: "Error Loading PDF Page",
+          description: `Could not display page from "${file.name}". Error: ${error instanceof Error ? error.message : String(error)}`,
+          variant: "destructive",
+        });
+      } finally {
+        setIsProcessingPdf(false);
+      }
     }
-    if (pdfInputRef.current) pdfInputRef.current.value = ""; // Reset input
+    if (pdfInputRef.current) pdfInputRef.current.value = ""; 
   };
 
   const handleJsonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -337,7 +400,6 @@ export default function PdfDataEditorPage() {
           const text = e.target?.result as string;
           const jsonData = JSON.parse(text) as DataRow[];
           
-          // Ensure 'id' property exists or generate one
           const processedJsonData = jsonData.map((row, index) => ({
             ...row,
             id: row.id || `gen-${Date.now()}-${index}` 
@@ -346,7 +408,7 @@ export default function PdfDataEditorPage() {
           setStructuredData(processedJsonData);
           const newColumns = generateColumnsFromJson(processedJsonData);
           setCurrentColumns(newColumns);
-          setCurrentColumnStartIndex(0); // Reset column scroll
+          setCurrentColumnStartIndex(0); 
           toast({
             title: "JSON Data Loaded",
             description: `Successfully loaded data from "${file.name}".`,
@@ -369,7 +431,7 @@ export default function PdfDataEditorPage() {
       };
       reader.readAsText(file);
     }
-    if (jsonInputRef.current) jsonInputRef.current.value = ""; // Reset input
+    if (jsonInputRef.current) jsonInputRef.current.value = ""; 
   };
 
 
@@ -442,6 +504,8 @@ export default function PdfDataEditorPage() {
             onElementSelect={handlePdfElementSelect} 
             selectedElementText={selectedPdfElementText}
             loadedPdfName={loadedPdfName}
+            pdfPageImage={pdfPageImage}
+            isProcessingPdf={isProcessingPdf}
           />
           <SmartMapper
             selectedPdfText={selectedPdfElementText}
