@@ -9,7 +9,7 @@ import SmartMapper from '@/components/smart-mapper';
 import type { DataRow, ColumnDefinition } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 
-const initialData: DataRow[] = [
+const defaultInitialData: DataRow[] = [
   {
     id: "1",
     pos: "П1",
@@ -70,7 +70,7 @@ const initialData: DataRow[] = [
   },
 ];
 
-const initialColumns: ColumnDefinition[] = [
+const defaultInitialColumns: ColumnDefinition[] = [
   { key: 'pos', header: 'POS', editable: true },
   { key: 'name', header: 'Name', editable: true },
   { key: 'type_original', header: 'Type Original', editable: true },
@@ -99,28 +99,45 @@ const initialColumns: ColumnDefinition[] = [
   { key: 'found_in_pdf_on_pages', header: 'Found In PDF (Pages)', editable: true },
 ];
 
-
 const MIN_PANEL_PERCENTAGE = 20;
 const MAX_PANEL_PERCENTAGE = 80;
 const RESIZE_HANDLE_WIDTH = 8; // px
 
+function generateColumnsFromJson(jsonData: DataRow[]): ColumnDefinition[] {
+  if (!jsonData || jsonData.length === 0) {
+    return defaultInitialColumns;
+  }
+  const firstRow = jsonData[0];
+  return Object.keys(firstRow).map(key => ({
+    key,
+    header: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // Format header
+    editable: true, // Default to editable
+  }));
+}
+
+
 export default function PdfDataEditorPage() {
-  const [structuredData, setStructuredData] = useState<DataRow[]>(initialData);
-  const [displayedGridColumns, setDisplayedGridColumns] = useState<ColumnDefinition[]>(initialColumns);
+  const [structuredData, setStructuredData] = useState<DataRow[]>(defaultInitialData);
+  const [currentColumns, setCurrentColumns] = useState<ColumnDefinition[]>(defaultInitialColumns);
   const [selectedPdfElementText, setSelectedPdfElementText] = useState<string | null>(null);
   const { toast } = useToast();
 
   const mainContainerRef = useRef<HTMLElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const jsonInputRef = useRef<HTMLInputElement>(null);
+  const [loadedPdfName, setLoadedPdfName] = useState<string | null>(null);
+
   const [pdfPanelPercent, setPdfPanelPercent] = useState(40);
   const [isResizing, setIsResizing] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
 
   const [currentColumnStartIndex, setCurrentColumnStartIndex] = useState(0);
-  const [numColumnsAllowedByWidth, setNumColumnsAllowedByWidth] = useState(initialColumns.length);
+  const [numColumnsAllowedByWidth, setNumColumnsAllowedByWidth] = useState(currentColumns.length);
 
-  const dataTableColumnNamesForMapper = useMemo(() => initialColumns.map(col => col.key).filter(key => key !== 'id'), [initialColumns]);
-  const allGridColumnKeys = useMemo(() => initialColumns.map(col => col.key), [initialColumns]);
+  const dataTableColumnNamesForMapper = useMemo(() => currentColumns.map(col => col.key).filter(key => key !== 'id'), [currentColumns]);
+  const allGridColumnKeys = useMemo(() => currentColumns.map(col => col.key), [currentColumns]);
+  const [displayedGridColumns, setDisplayedGridColumns] = useState<ColumnDefinition[]>(currentColumns);
 
 
   useEffect(() => {
@@ -175,12 +192,12 @@ export default function PdfDataEditorPage() {
 
   useEffect(() => {
     if (isMobileLayout) {
-      setNumColumnsAllowedByWidth(initialColumns.length);
+      setNumColumnsAllowedByWidth(currentColumns.length);
       setPdfPanelPercent(40); 
       return;
     }
     if (containerWidth === 0 && !isMobileLayout) { 
-      setNumColumnsAllowedByWidth(initialColumns.length);
+      setNumColumnsAllowedByWidth(currentColumns.length);
       return;
     }
 
@@ -203,30 +220,30 @@ export default function PdfDataEditorPage() {
     } else if (dataGridPanelWidthPx < 1150) {
       newNumColsAllowed = 5;
     } else {
-      newNumColsAllowed = Math.min(6, initialColumns.length); // Cap at 6 or total columns if fewer
+      newNumColsAllowed = Math.min(6, currentColumns.length);
     }
     setNumColumnsAllowedByWidth(newNumColsAllowed);
-  }, [pdfPanelPercent, isMobileLayout, containerWidth, initialColumns.length]);
+  }, [pdfPanelPercent, isMobileLayout, containerWidth, currentColumns.length]);
 
 
   useEffect(() => {
     setCurrentColumnStartIndex(prevStartIndex => {
-      const maxPossibleIndex = initialColumns.length - numColumnsAllowedByWidth;
+      const maxPossibleIndex = currentColumns.length - numColumnsAllowedByWidth;
       if (maxPossibleIndex <= 0) return 0;
       return Math.max(0, Math.min(prevStartIndex, maxPossibleIndex));
     });
-  }, [numColumnsAllowedByWidth, initialColumns.length]);
+  }, [numColumnsAllowedByWidth, currentColumns.length]);
 
 
   useEffect(() => {
-    if (numColumnsAllowedByWidth <= 0) { 
+    if (numColumnsAllowedByWidth <= 0 || currentColumns.length === 0) { 
         setDisplayedGridColumns([]);
         return;
     }
     const endIndex = currentColumnStartIndex + numColumnsAllowedByWidth;
-    const actualEndIndex = Math.min(endIndex, initialColumns.length);
-    setDisplayedGridColumns(initialColumns.slice(currentColumnStartIndex, actualEndIndex));
-  }, [currentColumnStartIndex, numColumnsAllowedByWidth, initialColumns]);
+    const actualEndIndex = Math.min(endIndex, currentColumns.length);
+    setDisplayedGridColumns(currentColumns.slice(currentColumnStartIndex, actualEndIndex));
+  }, [currentColumnStartIndex, numColumnsAllowedByWidth, currentColumns]);
 
 
   const handlePdfElementSelect = (text: string) => {
@@ -255,13 +272,13 @@ export default function PdfDataEditorPage() {
       return columnDefs.map(col => {
         let value = row[col.key];
         if (Array.isArray(value)) {
-          value = value.join(';'); // Convert arrays to semicolon-separated strings for CSV
+          value = value.join(';'); 
         } else if (value === null || value === undefined) {
           value = '';
         } else {
           value = String(value);
         }
-        return `"${value.replace(/"/g, '""')}"`; // Escape double quotes
+        return `"${value.replace(/"/g, '""')}"`; 
       }).join(',');
     });
     return [headers, ...rows].join('\n');
@@ -286,10 +303,75 @@ export default function PdfDataEditorPage() {
   };
 
   const handleExportCsv = () => {
-    const csvData = convertToCsv(structuredData, initialColumns); // Use initialColumns to get all columns
+    const csvData = convertToCsv(structuredData, currentColumns); 
     downloadCsv(csvData, 'edited_data');
     toast({ title: "Exported as CSV", description: "Data has been downloaded as CSV file." });
   };
+
+  const handleLoadPdfClick = () => {
+    pdfInputRef.current?.click();
+  };
+
+  const handleLoadJsonClick = () => {
+    jsonInputRef.current?.click();
+  };
+
+  const handlePdfFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setLoadedPdfName(file.name);
+      toast({
+        title: "PDF Loaded (Mock)",
+        description: `"${file.name}" selected. Viewer shows mock content.`,
+      });
+    }
+    if (pdfInputRef.current) pdfInputRef.current.value = ""; // Reset input
+  };
+
+  const handleJsonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const text = e.target?.result as string;
+          const jsonData = JSON.parse(text) as DataRow[];
+          
+          // Ensure 'id' property exists or generate one
+          const processedJsonData = jsonData.map((row, index) => ({
+            ...row,
+            id: row.id || `gen-${Date.now()}-${index}` 
+          }));
+
+          setStructuredData(processedJsonData);
+          const newColumns = generateColumnsFromJson(processedJsonData);
+          setCurrentColumns(newColumns);
+          setCurrentColumnStartIndex(0); // Reset column scroll
+          toast({
+            title: "JSON Data Loaded",
+            description: `Successfully loaded data from "${file.name}".`,
+          });
+        } catch (error) {
+          console.error("Error parsing JSON:", error);
+          toast({
+            title: "Error Loading JSON",
+            description: `Failed to parse JSON from "${file.name}". Please check file format.`,
+            variant: "destructive",
+          });
+        }
+      };
+      reader.onerror = () => {
+        toast({
+            title: "Error Reading File",
+            description: `Could not read the file "${file.name}".`,
+            variant: "destructive",
+          });
+      };
+      reader.readAsText(file);
+    }
+    if (jsonInputRef.current) jsonInputRef.current.value = ""; // Reset input
+  };
+
 
   const handleMappingApplied = (pdfText: string, mappedColumn: string) => {
     toast({
@@ -301,7 +383,7 @@ export default function PdfDataEditorPage() {
   const handleNextColumns = () => {
     setCurrentColumnStartIndex(prev => {
       if (numColumnsAllowedByWidth <= 0) return prev;
-      const maxStart = initialColumns.length - numColumnsAllowedByWidth;
+      const maxStart = currentColumns.length - numColumnsAllowedByWidth;
       if (maxStart < 0) return 0; 
       return Math.min(prev + 1, maxStart);
     });
@@ -311,7 +393,7 @@ export default function PdfDataEditorPage() {
     setCurrentColumnStartIndex(prev => Math.max(0, prev - 1));
   };
 
-  const canGoNext = numColumnsAllowedByWidth > 0 && currentColumnStartIndex < initialColumns.length - numColumnsAllowedByWidth;
+  const canGoNext = numColumnsAllowedByWidth > 0 && currentColumnStartIndex < currentColumns.length - numColumnsAllowedByWidth;
   const canGoPrev = currentColumnStartIndex > 0;
 
   const leftPanelStyle: React.CSSProperties = isMobileLayout ? {} : {
@@ -331,6 +413,22 @@ export default function PdfDataEditorPage() {
       <AppHeader
         onExportCsv={handleExportCsv}
         onExportJson={handleExportJson}
+        onLoadPdfClick={handleLoadPdfClick}
+        onLoadJsonClick={handleLoadJsonClick}
+      />
+      <input
+        type="file"
+        ref={pdfInputRef}
+        onChange={handlePdfFileChange}
+        accept=".pdf"
+        style={{ display: 'none' }}
+      />
+      <input
+        type="file"
+        ref={jsonInputRef}
+        onChange={handleJsonFileChange}
+        accept=".json,application/json"
+        style={{ display: 'none' }}
       />
       <main
         ref={mainContainerRef}
@@ -340,7 +438,11 @@ export default function PdfDataEditorPage() {
           className={`flex flex-col gap-6 ${isMobileLayout ? 'w-full' : ''}`}
           style={leftPanelStyle}
         >
-          <PdfViewer onElementSelect={handlePdfElementSelect} selectedElementText={selectedPdfElementText} />
+          <PdfViewer 
+            onElementSelect={handlePdfElementSelect} 
+            selectedElementText={selectedPdfElementText}
+            loadedPdfName={loadedPdfName}
+          />
           <SmartMapper
             selectedPdfText={selectedPdfElementText}
             dataTableColumns={dataTableColumnNamesForMapper}
@@ -385,5 +487,3 @@ export default function PdfDataEditorPage() {
     </div>
   );
 }
-
-    
