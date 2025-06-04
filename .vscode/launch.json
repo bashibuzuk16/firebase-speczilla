@@ -1,0 +1,10 @@
+{
+    "configurations": [
+        {
+            "type": "chrome",
+            "name": "http://page.tsx ",
+            "request": "launch",
+            "url": "http://page.tsx "
+        }
+    ]
+}

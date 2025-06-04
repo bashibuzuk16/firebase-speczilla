@@ -1,17 +1,13 @@
-
-"use client";
+'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import AppHeader from '@/components/app-header';
 import PdfViewer from '@/components/pdf-viewer';
 import DataGrid from '@/components/data-grid';
 import SmartMapper from '@/components/smart-mapper';
+import FloatingSmartMapper from '@/components/FloatingSmartMapper';
 import type { DataRow, ColumnDefinition } from '@/types';
-import { useToast } from "@/hooks/use-toast";
-import * as pdfjsLib from 'pdfjs-dist';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-
+import { useToast } from '@/hooks/use-toast';
 
 const defaultInitialData: DataRow[] = [
   {
@@ -103,7 +99,6 @@ const defaultInitialColumns: ColumnDefinition[] = [
   { key: 'found_in_pdf_on_pages', header: 'Found In PDF (Pages)', editable: true },
 ];
 
-
 const MIN_PANEL_PERCENTAGE = 20;
 const MAX_PANEL_PERCENTAGE = 80;
 const RESIZE_HANDLE_WIDTH = 8; // px
@@ -120,12 +115,18 @@ function generateColumnsFromJson(jsonData: DataRow[]): ColumnDefinition[] {
   }));
 }
 
+export default function Home() {
+  // ... все хуки и стейт как было ...
 
-export default function PdfDataEditorPage() {
+  // --- ДОБАВЛЯЕМ input и кнопку для загрузки PDF ---
+  // Вставим их в JSX ниже, до <main>
+
   const [structuredData, setStructuredData] = useState<DataRow[]>(defaultInitialData);
   const [currentColumns, setCurrentColumns] = useState<ColumnDefinition[]>(defaultInitialColumns);
   const [selectedPdfElementText, setSelectedPdfElementText] = useState<string | null>(null);
+  
   const { toast } = useToast();
+  const [pdfjsLib, setPdfjsLib] = useState<any>(null);
 
   const mainContainerRef = useRef<HTMLElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
@@ -148,7 +149,6 @@ export default function PdfDataEditorPage() {
   const dataTableColumnNamesForMapper = useMemo(() => currentColumns.map(col => col.key).filter(key => key !== 'id'), [currentColumns]);
   const allGridColumnKeys = useMemo(() => currentColumns.map(col => col.key), [currentColumns]);
   const [displayedGridColumns, setDisplayedGridColumns] = useState<ColumnDefinition[]>(currentColumns);
-
 
   useEffect(() => {
     const updateLayoutConfig = () => {
@@ -199,7 +199,6 @@ export default function PdfDataEditorPage() {
     };
   }, [isResizing, isMobileLayout]);
 
-
   useEffect(() => {
     if (isMobileLayout) {
       setNumColumnsAllowedByWidth(currentColumns.length);
@@ -235,7 +234,6 @@ export default function PdfDataEditorPage() {
     setNumColumnsAllowedByWidth(newNumColsAllowed);
   }, [pdfPanelPercent, isMobileLayout, containerWidth, currentColumns.length]);
 
-
   useEffect(() => {
     setCurrentColumnStartIndex(prevStartIndex => {
       const maxPossibleIndex = currentColumns.length - numColumnsAllowedByWidth;
@@ -243,7 +241,6 @@ export default function PdfDataEditorPage() {
       return Math.max(0, Math.min(prevStartIndex, maxPossibleIndex));
     });
   }, [numColumnsAllowedByWidth, currentColumns.length]);
-
 
   useEffect(() => {
     if (numColumnsAllowedByWidth <= 0 || currentColumns.length === 0) { 
@@ -254,7 +251,6 @@ export default function PdfDataEditorPage() {
     const actualEndIndex = Math.min(endIndex, currentColumns.length);
     setDisplayedGridColumns(currentColumns.slice(currentColumnStartIndex, actualEndIndex));
   }, [currentColumnStartIndex, numColumnsAllowedByWidth, currentColumns]);
-
 
   const handlePdfElementSelect = (text: string) => {
     if (pdfPageImages && pdfPageImages.length > 0) {
@@ -302,7 +298,6 @@ export default function PdfDataEditorPage() {
     return [headers, ...rows].join('\n');
   };
 
-
   const downloadCsv = (data: string, filename: string) => {
     const blob = new Blob([data], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -335,79 +330,71 @@ export default function PdfDataEditorPage() {
   };
 
   const handlePdfFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setLoadedPdfName(file.name);
-      setIsProcessingPdf(true);
-      setPdfPageImages(null); 
-      setCurrentPageNum(1);
-      setTotalPdfPages(0);
-      setSelectedPdfElementText(null); 
-      toast({
-        title: "Processing PDF...",
-        description: `Loading "${file.name}". This may take a moment.`,
-      });
+  const file = event.target.files?.[0];
+  console.log('handlePdfFileChange called', file);
+  if (!file) return;
 
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        const pdf = await loadingTask.promise;
-        
-        setTotalPdfPages(pdf.numPages);
-        const pageImagePromises: Promise<string>[] = [];
+  setLoadedPdfName(file.name);
+  setIsProcessingPdf(true);
+  setPdfPageImages(null);
+  setCurrentPageNum(1);
+  setTotalPdfPages(0);
+  setSelectedPdfElementText(null);
+  toast({
+    title: "Processing PDF...",
+    description: `Загружаем и разбиваем \"${file.name}\" на страницы. Это может занять время.`
+  });
 
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const desiredWidth = 800; 
-          const viewport = page.getViewport({ scale: 1 });
-          const scale = desiredWidth / viewport.width;
-          const scaledViewport = page.getViewport({ scale });
+  try {
+    // Динамический импорт только на клиенте!
+    const pdfjsLib = await import('pdfjs-dist/build/pdf');
+    // pdfjsLib.GlobalWorkerOptions.workerSrc = ... (не нужен для pdfjs-dist 5.x)
 
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          
-          if (!context) {
-              throw new Error("Could not get canvas context for page " + i);
-          }
+    const arrayBuffer = await file.arrayBuffer();
+    console.log('PDF file read as ArrayBuffer, size:', arrayBuffer.byteLength);
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    setTotalPdfPages(pdf.numPages);
+    console.log('PDF loaded, numPages:', pdf.numPages);
 
-          canvas.height = scaledViewport.height;
-          canvas.width = scaledViewport.width;
-
-          await page.render({ canvasContext: context, viewport: scaledViewport }).promise;
-          pageImagePromises.push(Promise.resolve(canvas.toDataURL('image/png')));
-        }
-        
-        const resolvedPageImages = await Promise.all(pageImagePromises);
-        setPdfPageImages(resolvedPageImages);
-        setCurrentPageNum(1);
-
-        toast({
-          title: "PDF Processed",
-          description: `${pdf.numPages} page(s) of "${file.name}" processed and ready to view.`,
-        });
-      } catch (error) {
-        console.error("Error processing PDF:", error);
-        setPdfPageImages(null);
-        toast({
-          title: "Error Loading PDF",
-          description: `Could not process PDF "${file.name}". Error: ${error instanceof Error ? error.message : String(error)}`,
-          variant: "destructive",
-        });
-      } finally {
-        setIsProcessingPdf(false);
-      }
+    const images: string[] = [];
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: context, viewport }).promise;
+      const imgData = canvas.toDataURL();
+      images.push(imgData);
+      console.log(`Page ${pageNum} rendered, image length:`, imgData.length);
     }
-    if (pdfInputRef.current) pdfInputRef.current.value = ""; 
-  };
+    console.log('All PDF pages rendered to images:', images.length);
+    setPdfPageImages(images);
+    console.log('setPdfPageImages called', images);
+    setIsProcessingPdf(false);
+    console.log('setIsProcessingPdf(false) called');
+  } catch (error) {
+    setIsProcessingPdf(false);
+    console.error('PDF processing error', error);
+    toast({
+      title: "Ошибка обработки PDF",
+      description: error instanceof Error ? error.message : String(error),
+      variant: "destructive"
+    });
+  } finally {
+    if (pdfInputRef.current) pdfInputRef.current.value = "";
+    console.log('handlePdfFileChange finished');
+  }
+};
 
-  const handleNextPage = () => {
-    setCurrentPageNum((prev) => Math.min(prev + 1, totalPdfPages));
-  };
+const handleNextPage = () => {
+  setCurrentPageNum((prev) => Math.min(prev + 1, totalPdfPages));
+};
 
-  const handlePrevPage = () => {
-    setCurrentPageNum((prev) => Math.max(prev - 1, 1));
-  };
-
+const handlePrevPage = () => {
+  setCurrentPageNum((prev) => Math.max(prev - 1, 1));
+};
 
   const handleJsonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -452,12 +439,12 @@ export default function PdfDataEditorPage() {
     if (jsonInputRef.current) jsonInputRef.current.value = ""; 
   };
 
-
   const handleMappingApplied = (pdfText: string, mappedColumn: string) => {
     toast({
       title: "Mapping Applied (Simulation)",
       description: `Rule created: If PDF shows "${pdfText.substring(0,20)}...", map to column "${mappedColumn}".`,
     });
+    setIsSmartMapperOpen(false);
   };
 
   const handleNextColumns = () => {
@@ -488,20 +475,30 @@ export default function PdfDataEditorPage() {
     overflow: 'hidden',
   };
 
+  useEffect(() => {
+    const initPdfJs = async () => {
+      const pdfjs = await import('pdfjs-dist');
+      pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker/pdf.worker.min.js';
+      setPdfjsLib(pdfjs);
+    };
+    initPdfJs();
+  }, []);
+
   return (
-    <div className="flex flex-col min-h-screen bg-background">
-      <AppHeader
+    <div className="min-h-screen flex flex-col bg-background">
+      <AppHeader 
         onExportCsv={handleExportCsv}
         onExportJson={handleExportJson}
         onLoadPdfClick={handleLoadPdfClick}
         onLoadJsonClick={handleLoadJsonClick}
       />
+
       <input
         type="file"
+        accept="application/pdf"
         ref={pdfInputRef}
-        onChange={handlePdfFileChange}
-        accept=".pdf"
         style={{ display: 'none' }}
+        onChange={handlePdfFileChange}
       />
       <input
         type="file"
@@ -529,10 +526,11 @@ export default function PdfDataEditorPage() {
             onPrevPage={handlePrevPage}
             isProcessingPdf={isProcessingPdf}
           />
-          <SmartMapper
+          <FloatingSmartMapper
             selectedPdfText={selectedPdfElementText}
             dataTableColumns={dataTableColumnNamesForMapper}
             onMappingApplied={handleMappingApplied}
+            onClose={() => {}}
           />
         </div>
 
@@ -573,4 +571,3 @@ export default function PdfDataEditorPage() {
     </div>
   );
 }
-
